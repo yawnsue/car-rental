@@ -1,7 +1,7 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import LoginPage from './LoginPage';
-import CustomerDashboard from './CustomerDashboard';
+import LoginPage from './components/LoginPage';
+import CustomerDashboard from './components/CustomerDashboard';
 
 function App() {
   const currentUser = null; 
