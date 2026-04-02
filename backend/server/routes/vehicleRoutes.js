@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const Vehicle = require('../models/Vehicle'); 
 
-router.post('/', async (req, res) => { //Create for adimn
+router.post('/', async (req, res) => { 
     try {
         const newVehicle = new Vehicle(req.body);
         await newVehicle.save();
@@ -12,7 +12,7 @@ router.post('/', async (req, res) => { //Create for adimn
     }
 });
 
-router.get('/', async (req, res) => { //Read for all users
+router.get('/', async (req, res) => { 
     try {
         const vehicles = await Vehicle.find(); 
         res.status(200).json(vehicles);
@@ -21,7 +21,7 @@ router.get('/', async (req, res) => { //Read for all users
     }
 });
 
-router.put('/:id', async (req, res) => { //Updates for admin
+router.put('/:id', async (req, res) => { 
     try {
         const updatedVehicle = await Vehicle.findByIdAndUpdate(req.params.id, req.body, { new: true });
         res.status(200).json(updatedVehicle);
@@ -30,7 +30,7 @@ router.put('/:id', async (req, res) => { //Updates for admin
     }
 });
 
-router.delete('/:id', async (req, res) => { //Delete for admin added
+router.delete('/:id', async (req, res) => { 
     try {
         await Vehicle.findByIdAndDelete(req.params.id);
         res.status(200).json({ message: 'Vehicle removed' });
