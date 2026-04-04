@@ -1,5 +1,5 @@
 import React from "react";
-import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
+import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
 import LoginPage from "./components/LoginPage";
 import CustomerDashboard from "./components/CustomerDashboard";
 import MyTripsPage from "./components/MyTripsPage";
@@ -10,28 +10,38 @@ import ReservationsOverviewPage from "./components/ReservationsOverviewPage";
 import TripDetailsPage from "./components/TripDetailsPage";
 import AccountPage from "./components/AccountPage";
 
+{
+  /* 
+    TEMP. ROUTING SETUP
+    I disabled route protection for front-end UI Dev.
+    Whoever's doing backend / authentication integration
+    can add protected routes and redirect logic back here.
+  */
+}
+
+// Redirects to login if no token is found
+function ProtectedRoute({ children }) {
+  const token = localStorage.getItem("token");
+  if (!token) {
+    return <Navigate to="/" replace />;
+  }
+  return children;
+}
+
 function App()
 {
   return (
     <Router basename="/car-rental">
-      {
-        /* 
-          TEMP. ROUTING SETUP
-          I disabled route protection for front-end UI Dev.
-          Whoever's doing backend / authentication integration
-          can add protected routes and redirect logic back here.
-        */
-      }
       <Routes>
         <Route path="/" element={<LoginPage />} />
-        <Route path="/browse" element={<CustomerDashboard />} />
-        <Route path="/trips" element={<MyTripsPage />} />
-        <Route path="/vehicles" element={<BrowseVehiclesPage />} />
-        <Route path="/vehicles/:vehicleId" element={<VehicleDetailsPage />} />
-        <Route path="/reservations/:vehicleId" element={<ReservationPage />} />
-        <Route path="/reservations" element={<ReservationsOverviewPage />} />
-        <Route path="/trip-details/:tripId" element={<TripDetailsPage />} />
-        <Route path="/account" element={<AccountPage />} />
+        <Route path="/browse" element={<ProtectedRoute><CustomerDashboard /></ProtectedRoute>} />
+        <Route path="/trips" element={<ProtectedRoute><MyTripsPage /></ProtectedRoute>} />
+        <Route path="/vehicles" element={<ProtectedRoute><BrowseVehiclesPage /></ProtectedRoute>} />
+        <Route path="/vehicles/:vehicleId" element={<ProtectedRoute><VehicleDetailsPage /></ProtectedRoute>} />
+        <Route path="/reservations/:vehicleId" element={<ProtectedRoute><ReservationPage /></ProtectedRoute>} />
+        <Route path="/reservations" element={<ProtectedRoute><ReservationsOverviewPage /></ProtectedRoute>} />
+        <Route path="/trip-details/:tripId" element={<ProtectedRoute><TripDetailsPage /></ProtectedRoute>} />
+        <Route path="/account" element={<ProtectedRoute><AccountPage /></ProtectedRoute>} />
       </Routes>
     </Router>
   );
