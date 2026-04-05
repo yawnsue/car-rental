@@ -10,7 +10,7 @@ function LoginPage({ onLogin }) {
   const [error, setError] = useState("");
   const navigate = useNavigate();
 
-  const API_URL = "http://localhost:5000/api/users";
+  const API_URL = "http://localhost:5001/api/users";
 
   const handleSubmit = async (e) => {
     e.preventDefault();
