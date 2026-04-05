@@ -1,6 +1,8 @@
 const express = require('express');
 const router = express.Router();
-const User = require('../../database/models/User');
+const jwt = require('jsonwebtoken');
+const User = require('../../../database/models/User');
+const { verifyToken, adminOnly, JWT_SECRET } = require('../middleware/auth');
 
 router.post('/register', async (req, res) => {
     const { username, password, role } = req.body;
@@ -19,9 +21,21 @@ router.post('/register', async (req, res) => {
 
         await newUser.save();
 
+        // Generate token so user is logged in after registering
+        const token = jwt.sign(
+            { id: newUser._id, username: newUser.username, role: newUser.role },
+            JWT_SECRET,
+            { expiresIn: '24h' }
+        );
+
         res.status(201).json({
             message: 'User created successfully',
-            user: newUser
+            token,
+            user: {
+                id: newUser._id,
+                username: newUser.username,
+                role: newUser.role
+            }
         });
     } catch (error) {
         res.status(500).json({ message: 'Internal server error.', error });
@@ -34,31 +48,56 @@ router.post('/login', async (req, res) => {
     try {
         const user = await User.findOne({ username });
 
-        if (!user || user.password !== password) {
+        if (!user) {
             return res.status(401).json({ message: 'Invalid username or password.' });
         }
 
+        // Compare hashed password
+        const isMatch = await user.comparePassword(password);
+        if (!isMatch) {
+            return res.status(401).json({ message: 'Invalid username or password.' });
+        }
+
+        // Generate JWT
+        const token = jwt.sign(
+            { id: user._id, username: user.username, role: user.role },
+            JWT_SECRET,
+            { expiresIn: '24h' }
+        );
+
         res.status(200).json({
             message: 'Login successful',
-            user
+            token,
+            user: {
+                id: user._id,
+                username: user.username,
+                role: user.role
+            }
         });
     } catch (error) {
         res.status(500).json({ message: 'Internal server error.', error });
     }
 });
 
-router.get('/', async (req, res) => {
+// Protected routes below — require valid token
+
+router.get('/', verifyToken, adminOnly, async (req, res) => {
     try {
-        const users = await User.find();
+        const users = await User.find().select('-password');
         res.status(200).json(users);
     } catch (error) {
         res.status(500).json({ message: 'Error fetching users', error });
     }
 });
 
-router.get('/:id', async (req, res) => {
+router.get('/:id', verifyToken, async (req, res) => {
     try {
-        const user = await User.findById(req.params.id);
+        // Standard users can only view their own profile
+        if (req.user.role !== 'Administrator' && req.user.id !== req.params.id) {
+            return res.status(403).json({ message: 'Access denied.' });
+        }
+
+        const user = await User.findById(req.params.id).select('-password');
 
         if (!user) {
             return res.status(404).json({ message: 'User not found' });
@@ -70,13 +109,18 @@ router.get('/:id', async (req, res) => {
     }
 });
 
-router.put('/:id', async (req, res) => {
+router.put('/:id', verifyToken, async (req, res) => {
     try {
+        // Standard users can only update their own profile
+        if (req.user.role !== 'Administrator' && req.user.id !== req.params.id) {
+            return res.status(403).json({ message: 'Access denied.' });
+        }
+
         const updatedUser = await User.findByIdAndUpdate(
             req.params.id,
             req.body,
             { new: true, runValidators: true }
-        );
+        ).select('-password');
 
         if (!updatedUser) {
             return res.status(404).json({ message: 'User not found' });
@@ -88,7 +132,7 @@ router.put('/:id', async (req, res) => {
     }
 });
 
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', verifyToken, adminOnly, async (req, res) => {
     try {
         const deletedUser = await User.findByIdAndDelete(req.params.id);
 

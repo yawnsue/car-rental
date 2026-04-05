@@ -10,7 +10,9 @@ function LoginPage({ onLogin }) {
   const [error, setError] = useState("");
   const navigate = useNavigate();
 
-  const handleSubmit = (e) => {
+  const API_URL = "http://localhost:5001/api/users";
+
+  const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
 
@@ -30,8 +32,30 @@ function LoginPage({ onLogin }) {
         - token handling.
         - redirect logic.
     */
-  navigate("/browse");
 
+    try {
+      const endpoint = isSignUp ? `${API_URL}/register` : `${API_URL}/login`;
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username, password }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        setError(data.message || "Something went wrong.");
+        return;
+      }
+
+      // Store token and user info
+      localStorage.setItem("token", data.token);
+      localStorage.setItem("user", JSON.stringify(data.user));
+
+      navigate("/browse");
+    } catch (err) {
+      setError("Unable to connect to server.");
+    }
   };
 
   return (

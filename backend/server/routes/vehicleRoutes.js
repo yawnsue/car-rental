@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const Vehicle = require('../../database/models/Vehicle');
+const Vehicle = require('../../../database/models/Vehicle');
 
 router.post('/', async (req, res) => {
     try {
