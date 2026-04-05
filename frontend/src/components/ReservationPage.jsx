@@ -1,20 +1,185 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import "../styles/dashboard.css";
 import logo from "../assets/black-rock-logo.png";
-import vehicles from "../data/vehiclesData";
 
 function ReservationPage() {
   const navigate = useNavigate();
   const { vehicleId } = useParams();
 
-  const vehicle = vehicles.find((v) => v.id === vehicleId);
+  const [vehicle, setVehicle] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [pageError, setPageError] = useState("");
 
   const [pickupDate, setPickupDate] = useState("");
   const [returnDate, setReturnDate] = useState("");
   const [pickupLocation, setPickupLocation] = useState("Orlando, FL");
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+
+  useEffect(() => {
+    const fetchVehicle = async () => {
+      try {
+        const response = await fetch(`http://localhost:5000/api/vehicles/${vehicleId}`);
+        const data = await response.json();
+
+        if (!response.ok) {
+          setPageError(data.message || "Vehicle not found.");
+          setVehicle(null);
+          return;
+        }
+
+        setVehicle(data);
+      } catch (err) {
+        console.error("Error fetching reservation vehicle:", err);
+        setPageError("Unable to load vehicle.");
+        setVehicle(null);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchVehicle();
+  }, [vehicleId]);
+
+  const getDaysBetween = (start, end) => {
+    const startDate = new Date(start);
+    const endDate = new Date(end);
+    const diffTime = endDate - startDate;
+    return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+  };
+
+  const saveReservationLocally = (reservation) => {
+    const existingReservations =
+      JSON.parse(localStorage.getItem("reservations")) || [];
+    existingReservations.push(reservation);
+    localStorage.setItem("reservations", JSON.stringify(existingReservations));
+  };
+
+  const handleReservationSubmit = async (e) => {
+    e.preventDefault();
+    setError("");
+    setSuccess("");
+
+    if (!pickupDate || !returnDate || !pickupLocation.trim()) {
+      setError("Please complete all reservation fields.");
+      return;
+    }
+
+    const days = getDaysBetween(pickupDate, returnDate);
+
+    if (days <= 0) {
+      setError("Return date must be after pickup date.");
+      return;
+    }
+
+    const user = JSON.parse(localStorage.getItem("user"));
+    const token = localStorage.getItem("token");
+    const userId = user?._id || user?.id;
+    const vehicleDbId = vehicle?._id || vehicle?.id;
+
+    if (!user || !userId) {
+      setError("You must be logged in to create a reservation.");
+      return;
+    }
+
+    if (!vehicle || !vehicleDbId) {
+      setError("Vehicle information is unavailable.");
+      return;
+    }
+
+    const totalPrice = Number(vehicle.dailyRate) * days;
+
+    const localReservation = {
+      _id: `local-${Date.now()}`,
+      user: userId,
+      vehicle: vehicleDbId,
+      vehicleName: `${vehicle.make} ${vehicle.model}`,
+      pickupDate,
+      returnDate,
+      pickupLocation,
+      totalPrice,
+      status: "Upcoming",
+      dateRange: `${pickupDate} - ${returnDate}`,
+      imageClass: "trip-image",
+      canCancel: true,
+    };
+
+    saveReservationLocally(localReservation);
+
+    try {
+      const response = await fetch("http://localhost:5000/api/bookings", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          user: userId,
+          vehicle: vehicleDbId,
+          startDate: pickupDate,
+          endDate: returnDate,
+          totalPrice,
+          status: "Upcoming",
+        }),
+      });
+
+      if (!response.ok) {
+        setSuccess("Reservation saved locally for demo.");
+        setTimeout(() => navigate("/reservations"), 1200);
+        return;
+      }
+
+      setSuccess("Reservation created successfully.");
+      setTimeout(() => navigate("/reservations"), 1200);
+    } catch (err) {
+      console.error("Reservation create error:", err);
+      setSuccess("Reservation saved locally for demo.");
+      setTimeout(() => navigate("/reservations"), 1200);
+    }
+  };
+
+  const renderVehicleImage = () => {
+    if (vehicle?.imageUrl && vehicle.imageUrl.trim() !== "") {
+      return (
+        <div
+          className="reservation-vehicle-image"
+          style={{
+            background: `linear-gradient(rgba(10, 10, 10, 0.22), rgba(10, 10, 10, 0.28)), url("${vehicle.imageUrl}") center/cover no-repeat`,
+          }}
+        />
+      );
+    }
+
+    return <div className="reservation-vehicle-image trip-image"></div>;
+  };
+
+  if (loading) {
+    return (
+      <div className="dashboard-page">
+        <div className="dashboard-layout">
+          <aside className="dashboard-sidebar">
+            <div className="sidebar-top">
+              <div className="sidebar-brand">
+                <img src={logo} alt="Black Rock Solutions logo" className="sidebar-logo" />
+                <div className="sidebar-brand-copy">
+                  <h1>Black Rock Solutions</h1>
+                </div>
+              </div>
+            </div>
+          </aside>
+
+          <main className="dashboard-main">
+            <section className="dashboard-card trips-panel">
+              <div className="empty-state">
+                <h3>Loading reservation details...</h3>
+              </div>
+            </section>
+          </main>
+        </div>
+      </div>
+    );
+  }
 
   if (!vehicle) {
     return (
@@ -59,7 +224,7 @@ function ReservationPage() {
             <section className="dashboard-card trips-panel">
               <div className="empty-state">
                 <h3>Vehicle not found.</h3>
-                <p>Select a valid vehicle before creating a reservation.</p>
+                <p>{pageError || "Select a valid vehicle before creating a reservation."}</p>
                 <div className="empty-state-actions">
                   <button
                     className="btn btn-primary dashboard-btn-sm"
@@ -76,104 +241,12 @@ function ReservationPage() {
     );
   }
 
-  const getDaysBetween = (start, end) => {
-    const startDate = new Date(start);
-    const endDate = new Date(end);
-    const diffTime = endDate - startDate;
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-    return diffDays;
-  };
-
-  const saveReservationLocally = (reservation) => {
-    const existingReservations =
-      JSON.parse(localStorage.getItem("reservations")) || [];
-    existingReservations.push(reservation);
-    localStorage.setItem("reservations", JSON.stringify(existingReservations));
-  };
-
-  const handleReservationSubmit = async (e) => {
-    e.preventDefault();
-    setError("");
-    setSuccess("");
-
-    if (!pickupDate || !returnDate || !pickupLocation.trim()) {
-      setError("Please complete all reservation fields.");
-      return;
-    }
-
-    const days = getDaysBetween(pickupDate, returnDate);
-
-    if (days <= 0) {
-      setError("Return date must be after pickup date.");
-      return;
-    }
-
-    const user = JSON.parse(localStorage.getItem("user"));
-    const token = localStorage.getItem("token");
-    const userId = user?._id || user?.id;
-
-    if (!user || !userId) {
-      setError("You must be logged in to create a reservation.");
-      return;
-    }
-
-    const totalPrice = vehicle.price * days;
-
-    const localReservation = {
-      _id: `local-${Date.now()}`,
-      user: userId,
-      vehicle: vehicleId,
-      vehicleName: vehicle.name,
-      pickupDate,
-      returnDate,
-      pickupLocation,
-      totalPrice,
-      status: "Upcoming",
-      dateRange: `${pickupDate} - ${returnDate}`,
-      imageClass: vehicle.imageClass || "trip-image",
-      canCancel: true,
-    };
-
-    // Save locally first so the UI works even if backend vehicle ids do not match
-    saveReservationLocally(localReservation);
-
-    try {
-      const response = await fetch("http://localhost:5000/api/bookings", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify({
-          user: userId,
-          vehicle: vehicleId,
-          startDate: pickupDate,
-          endDate: returnDate,
-          totalPrice,
-          status: "Upcoming",
-        }),
-      });
-
-      if (!response.ok) {
-        setSuccess("Reservation saved locally for demo.");
-        setTimeout(() => navigate("/reservations"), 1200);
-        return;
-      }
-
-      setSuccess("Reservation created successfully.");
-      setTimeout(() => navigate("/reservations"), 1200);
-    } catch (err) {
-      setSuccess("Reservation saved locally for demo.");
-      setTimeout(() => navigate("/reservations"), 1200);
-    }
-  };
-
   const estimatedDays =
     pickupDate && returnDate && getDaysBetween(pickupDate, returnDate) > 0
       ? getDaysBetween(pickupDate, returnDate)
       : 3;
 
-  const estimatedTotal = vehicle.price * estimatedDays;
+  const estimatedTotal = Number(vehicle.dailyRate) * estimatedDays;
 
   return (
     <div className="dashboard-page">
@@ -197,10 +270,7 @@ function ReservationPage() {
               <button className="sidebar-nav-item" onClick={() => navigate("/vehicles")}>
                 Browse Vehicles
               </button>
-              <button
-                className="sidebar-nav-item active"
-                onClick={() => navigate("/reservations")}
-              >
+              <button className="sidebar-nav-item active" onClick={() => navigate("/reservations")}>
                 Reservations
               </button>
               <button className="sidebar-nav-item" onClick={() => navigate("/account")}>
@@ -226,7 +296,7 @@ function ReservationPage() {
             <div className="dashboard-topbar-actions">
               <button
                 className="btn btn-secondary dashboard-btn-sm"
-                onClick={() => navigate(`/vehicles/${vehicle.id}`)}
+                onClick={() => navigate(`/vehicles/${vehicle._id || vehicle.id}`)}
               >
                 Back to Vehicle
               </button>
@@ -235,28 +305,36 @@ function ReservationPage() {
 
           <section className="reservation-layout">
             <article className="dashboard-card reservation-main">
-              <div className={`reservation-vehicle-image ${vehicle.imageClass}`}></div>
+              {renderVehicleImage()}
 
               <div className="reservation-main-content">
                 <div className="reservation-vehicle-header">
                   <div>
                     <p className="vehicle-details-label">Selected Vehicle</p>
-                    <h3 className="reservation-vehicle-title">{vehicle.name}</h3>
-                    <p className="reservation-vehicle-type">{vehicle.type}</p>
+                    <h3 className="reservation-vehicle-title">
+                      {vehicle.make} {vehicle.model}
+                    </h3>
+                    <p className="reservation-vehicle-type">
+                      {vehicle.type || "Vehicle"}
+                    </p>
                   </div>
 
                   <div className="reservation-price-box">
-                    <span>${vehicle.price}</span>
+                    <span>${vehicle.dailyRate}</span>
                     <small>/day</small>
                   </div>
                 </div>
 
                 <div className="vehicle-features">
-                  {vehicle.features.map((feature, index) => (
-                    <span className="vehicle-feature-tag" key={index}>
-                      {feature}
-                    </span>
-                  ))}
+                  {Array.isArray(vehicle.features) && vehicle.features.length > 0 ? (
+                    vehicle.features.map((feature, index) => (
+                      <span className="vehicle-feature-tag" key={index}>
+                        {typeof feature === "string" ? feature : feature.name}
+                      </span>
+                    ))
+                  ) : (
+                    <span className="vehicle-feature-tag">Standard Rental</span>
+                  )}
                 </div>
 
                 <form className="reservation-form" onSubmit={handleReservationSubmit}>
@@ -318,7 +396,7 @@ function ReservationPage() {
                 <p className="vehicle-details-label">Pricing Summary</p>
                 <div className="reservation-summary-row">
                   <span>Vehicle Rate</span>
-                  <strong>${vehicle.price}/day</strong>
+                  <strong>${vehicle.dailyRate}/day</strong>
                 </div>
                 <div className="reservation-summary-row">
                   <span>Estimated Duration</span>
@@ -333,7 +411,7 @@ function ReservationPage() {
               <div className="reservation-summary-section">
                 <p className="vehicle-details-label">Reservation Notes</p>
                 <p className="reservation-note">
-                  Reservations are saved locally for the front-end flow and also try the backend.
+                  Reservations are saved locally for the frontend flow and also attempt backend persistence.
                 </p>
               </div>
             </aside>
